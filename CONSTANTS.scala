@@ -9,9 +9,11 @@ object CONSTANTS {
   val GLUE_SYMBOL_POS      : String = GLUE_SYMBOL + CONVERSION_SYMBOL //symbol denotes the contact with channel ended up with conversion
   val GLUE_SYMBOL_NEG      : String = GLUE_SYMBOL + NO_CONVERSION_SYMBOL //symbol denotes the contact with channel ended up without conversion
   val TRANSIT              : String = "=>"
-  val PROFILEID            : String = "PROFILEID"
-  val SESSIONID            : String = "SESSIONID"
-  val TRANSACTIONID        : String = "TRANSACTIONID"
+  val IS_NOT_GOAL          : String = "0"
+  val CONCAT_SYMBOL        : String = "_>>_"
+//  val PROFILEID            : String = "PROFILEID"
+//  val SESSIONID            : String = "SESSIONID"
+//  val TRANSACTIONID        : String = "TRANSACTIONID"
   val OPTION_PREFIX        : String = "-"
   val ZERO_HTS             : Long   = 0
 
@@ -140,7 +142,7 @@ object CONSTANTS {
   def isEmpty(x:String) = x == "null" || x.isEmpty || x == null
 
 
-  val channel_creator1 = (channel_depth               : String,
+  val channel_creator = (channel_depth       : String,
                           src                 : String,
                           interaction_type    : String,
                           utm_source          : String,
@@ -153,13 +155,14 @@ object CONSTANTS {
                           creative_id         : String,
                           ad_id               : String) => {
 
-    val utm_builder = List(utm_source,utm_medium,utm_campaign,utm_content,utm_term).mkString("/")
+    val utm_builder = List(utm_source,utm_medium,utm_campaign,utm_content,utm_term).mkString(CONCAT_SYMBOL)
 
     val channel = src match {
-      case "adriver" | "dcm" if channel_depth == "profile"  => List(interaction_type,utm_builder,profileID).mkString("/")
-      case "adriver" | "dcm" if channel_depth == "ad"       => List(interaction_type,utm_builder,profileID,ad_id).mkString("/")
-      case "adriver" | "dcm" if channel_depth == "creative" => List(interaction_type,utm_builder,profileID,ad_id,creative_id).mkString("/")
-      case "ga" | "bq" if channel_depth == "session"        => List(utm_builder,ga_sessioncount).mkString("/")
+      case "adriver" | "dcm" if channel_depth == "profile"  => List(interaction_type,utm_builder,profileID).mkString(CONCAT_SYMBOL)
+      case "adriver" | "dcm" if channel_depth == "ad"       => List(interaction_type,utm_builder,profileID,ad_id).mkString(CONCAT_SYMBOL)
+      case "adriver" | "dcm" if channel_depth == "creative" => List(interaction_type,utm_builder,profileID,ad_id,creative_id).mkString(CONCAT_SYMBOL)
+      case "adriver" | "dcm"                                => utm_builder
+      case "ga" | "bq" if channel_depth == "session"        => List(utm_builder,ga_sessioncount).mkString(CONCAT_SYMBOL)
       case "ga" | "bq"                                      => utm_builder
       case _ => throw new Exception("Unknown data source or incorrect channel_depth")
     }
@@ -174,29 +177,6 @@ object CONSTANTS {
     val path = before_valid ++ after
     path
   }
-
-
-//  val htsTube = (arr         : Seq[Map[String,Long]],
-//                 contact_pos : String,
-//                 contact_neg : String) => {
-//    //Create user paths
-//    val htsSeq = arr.map{elem => elem match {
-//      case conversion if(elem.keys.head.endsWith(contact_pos)) => elem.values.head.toString + contact_pos
-//      case touch if(elem.keys.head.endsWith(contact_neg))      => elem.values.head.toString + contact_neg
-//    }}
-//    htsSeq
-//  }
-//
-//  val channelTube = (arr:Seq[Map[String,Long]]) => {
-//    arr.map(_.keys.head)
-//  }
-//
-//
-//
-//  val touch_creator1 = (channel:String, hts:Long ,conversion:String) => {
-//    val l = List(channel,hts.toString,conversion)
-//    l
-//  }
 
   val pathCreator = (arr:Seq[Map[String,Long]],mode:Boolean,conv_symbol:String,no_conv_symbol:String) => {
 
@@ -217,21 +197,14 @@ object CONSTANTS {
 
     val arr4 = arr3.map(_.dropRight(1))
 
-//    val arr5 = arr4.map(elem => elem match {
-//      case List() => List(List("singleGoal"->ZERO_HTS))
-//      case x @ _  => x
-//    })
-
-//    val arr5 = arr4.map(elem_list => elem_list.map(elem => elem.keys.head.replace(GLUE_SYMBOL_NEG,"").trim))
-
     arr4
 
   }
 
   val chl_hts_Extractor = (arr:Seq[Map[String,Long]],metric:String) => {
     val arr1 = arr match {
-      case Nil if metric == "CHL" => List("singleGoal").mkString(TRANSIT)
-      case Nil if metric == "HTS" => List(0.toString).mkString(TRANSIT)
+      case Nil if metric == "CHL"   => List("singleGoal").mkString(TRANSIT)
+      case Nil if metric == "HTS"   => List(0.toString).mkString(TRANSIT)
       case x @ _ if metric == "CHL" => x.map(_.keys.head.replace(GLUE_SYMBOL_NEG,"")).mkString(TRANSIT)
       case y @ _ if metric == "HTS" => y.map(_.values.head.toString).mkString(TRANSIT)
     }

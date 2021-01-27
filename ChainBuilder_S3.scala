@@ -10,9 +10,9 @@ object ChainBuilder_S3 {
     val spark = SparkSession.builder.appName("ChainBuilder on S3").getOrCreate()
     import spark.implicits._
 
-    val channel_creator_udf = spark.udf.register("channel_creator_udf", channel_creator1)
-    val depaturePoint_udf   = spark.udf.register("depaturePoint_udf", depaturePoint)
-    val path_creator_udf    = spark.udf.register("path_creator_udf", pathCreator)
+    val channel_creator_udf   = spark.udf.register("channel_creator_udf", channel_creator)
+    val depaturePoint_udf     = spark.udf.register("depaturePoint_udf", depaturePoint)
+    val path_creator_udf      = spark.udf.register("path_creator_udf", pathCreator)
     val chl_hts_Extractor_udf = spark.udf.register("chl_hts_Extractor_udf",chl_hts_Extractor)
 
     val optionsMap  = argsPars(args) //Parse input arguments from command line
@@ -23,7 +23,7 @@ object ChainBuilder_S3 {
 
     // Validate date chronology
     date_base.correct_chronology match {
-      case true  => println("Ok")//!!!!!
+      case true  => println("Date chronology is correct")
       case false => throw new Exception(s"Incorrect date chronology. Check input dates")
     }
 
@@ -31,7 +31,6 @@ object ChainBuilder_S3 {
     val date_startValid:Long  = date_base.getChronology(1)
     val date_finishValid:Long = date_base.getChronology(2)
 
-    println(s"----------------------------$date_tHOLDValid.$date_startValid,$date_finishValid-----------------------------")
 
     val data = spark.read.
       format("parquet").
@@ -56,14 +55,12 @@ object ChainBuilder_S3 {
       $"ga_sessioncount".cast(sql.types.StringType)
     )
 
-    data_work.show(20)
 
     val data_custom_0 = data_work.
       filter($"HitTimeStamp" >= date_tHOLDValid && $"HitTimeStamp" < date_finishValid).
-      filter($"goal" === "0" || $"goal".isin(validMap("target_numbers"):_*)).
+      filter($"goal" === IS_NOT_GOAL || $"goal".isin(validMap("target_numbers"):_*)).
       filter($"src".isin(validMap("source_platform"):_*))
 
-    data_custom_0.show(20)
 
     // IF PRODUCT NAME ONE ELEMENT!!!!
 //    val data_custom_1  = validMap("product_name") match {
@@ -144,49 +141,33 @@ object ChainBuilder_S3 {
       $"ClientID",
       explode($"path_list").as("path")
     )
-//
-    data_path.show(10,false)
 
     val data_detail = data_path.
-      withColumn("CHL_PATH",chl_hts_Extractor_udf($"path",lit("CHL"))).
-      withColumn("HTS_PATH",chl_hts_Extractor_udf($"path",lit("HTS"))).
+      withColumn("user_path",chl_hts_Extractor_udf($"path",lit("CHL"))).
+      withColumn("timeline",chl_hts_Extractor_udf($"path",lit("HTS"))).
       select(
         $"ClientID",
-        $"CHL_PATH",
-        $"HTS_PATH"
+        $"user_path",
+        $"timeline"
       )
 
+    data_detail.
+      write.format("csv").
+      option("header","true").
+      mode("overwrite").
+      save(validMap("output_pathD").head.toString)
+
     val data_agg = data_detail.
-      groupBy($"CHL_PATH").
+      groupBy($"user_path").
       agg(count($"ClientID").as("count")).
       sort($"count".desc)
 
-    data_detail.show(20,false)
 
     data_agg.coalesce(1).
       write.format("csv").
       option("header", "true").
       mode("overwrite").
       save(validMap("output_path").head.toString)
-
-////
-//    val data_detail = data_path.
-//      withColumn("CHL_PATH",map_keys($"path").getItem(0)).
-//      withColumn("HTS_PATH",map_values($"path").getItem(0)).
-//      select(
-//        $"ClientID",
-//        $"CHL_PATH",
-//        $"HTS_PATH"
-//      )
-
-//    data_detail.show(20,false)
-//
-//    val data_agg = data_detail.
-//      groupBy($"CHL_PATH").
-//      agg(count($"ClientID").as("count")).
-//      sort($"count".desc)
-//
-//    data_agg.show(10)
 
 
   }
